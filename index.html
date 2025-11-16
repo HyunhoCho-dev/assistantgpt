@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistant GPT - AI Agent powered by Groq</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for clean Light Mode */
+        :root {
+            --bg-light: #f7f7f7; /* Primary light background */
+            --text-dark: #333333; /* Main text color */
+            --bg-header: #ffffff; /* Header background */
+            --bg-input: #ffffff; /* Input area background */
+            --bg-user-message: #e9e9e9; /* Light gray for user background */
+            --border-line: #dddddd; /* Separator lines */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-light);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #aaaaaa;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #888888;
+        }
+
+        .chat-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* Chat display - Removing bubbles, using background for user only */
+        .message-bubble {
+            padding: 1rem 1.5rem;
+            margin-bottom: 15px;
+            border-radius: 0.5rem;
+            max-width: 100%; /* Use full width for text flow */
+            line-height: 1.6;
+        }
+        
+        .ai-tool-call {
+            background-color: #e0f2fe; /* Light blue for tool info */
+            color: #0c4a6e;
+            font-size: 0.85rem;
+            border-left: 4px solid #38bdf8;
+            padding: 0.75rem 1.5rem;
+            margin: 0.5rem 0 1rem 0;
+            border-radius: 0.5rem;
+        }
+
+        .user-message {
+            background-color: var(--bg-user-message); /* Light gray background */
+            color: var(--text-dark);
+            margin-left: auto; /* Aligns to right */
+            border-radius: 0.5rem; /* Soft corners */
+        }
+
+        .ai-message {
+            background-color: transparent; /* No background */
+            color: var(--text-dark);
+            margin-right: auto; /* Aligns to left (default) */
+            border-radius: 0; /* No corners */
+        }
+
+        .input-area {
+            position: sticky;
+            bottom: 0;
+            background-color: var(--bg-input);
+            border-top: 1px solid var(--border-line);
+            padding: 20px 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05); /* Soft shadow for lift */
+        }
+
+        .input-wrapper {
+            max-width: 1000px;
+            width: 100%;
+            padding: 0 20px;
+        }
+
+        /* Custom button style for submit */
+        .submit-button {
+            background-color: #3b82f6;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .submit-button:hover:not(:disabled) {
+            background-color: #2563eb;
+        }
+        .submit-button:disabled {
+            background-color: #ccc; /* Lighter disabled button */
+            cursor: not-allowed;
+            color: #666;
+        }
+        .pre-container {
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* Styles for the custom toggle switch */
+        .toggle-bg {
+            background-color: #d1d5db; /* Gray-300 (OFF state) */
+            position: relative;
+        }
+        .toggle-bg:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #4f46e5; /* Indigo-600 (Active color) */
+            border-radius: 9999px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #browserSearchToggle:checked ~ .toggle-bg {
+            background-color: #4f46e5; /* Active color */
+        }
+        #browserSearchToggle:checked ~ .dot {
+            transform: translateX(24px);
+        }
+        #browserSearchToggle:checked ~ .toggle-bg:before {
+            opacity: 1;
+        }
+        
+        /* Python Server Toggle Styles */
+        #pythonServerToggle:checked ~ .toggle-bg {
+            background-color: #4f46e5; /* Active color */
+        }
+        #pythonServerToggle:checked ~ .dot {
+            transform: translateX(24px);
+        }
+        #pythonServerToggle:checked ~ .toggle-bg:before {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Settings Area -->
+    <header class="bg-white p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10" style="background-color: var(--bg-header);">
+        <h1 class="text-xl font-bold text-gray-900">Assistant GPT (Code & Search Enabled)</h1>
+        <button id="settingsBtn" class="p-2 rounded-full hover:bg-gray-100 transition duration-150">
+            <!-- Settings Icon (Cog) -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings text-gray-600"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 0-.27 3.42l.51.25a2 2 0 0 1 1 1.74v.18a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.74l.51-.25a2 2 0 0 0-.27-3.42l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+    </header>
+
+    <!-- Main Chat Area -->
+    <main id="chatContainer" class="chat-container">
+        <div class="text-center py-10">
+            <h2 class="text-3xl font-semibold mb-2">Welcome to Assistant GPT</h2>
+            <p class="text-lg text-gray-600">Your goal-oriented AI agent. Enter a complex task and watch it execute.</p>
+            <p id="apiKeyStatus" class="mt-4 text-sm font-medium p-2 rounded-lg inline-block bg-red-200 text-red-800">
+                ⚠️ API Key Required. Click settings to enter your Groq API Key.
+            </p>
+            <p class="mt-2 text-sm text-gray-500">
+                <span class="font-bold text-blue-600">GPT-OSS models now support Python Code Execution AND Browser Search</span>.
+            </p>
+        </div>
+        <!-- Messages will be appended here -->
+    </main>
+
+    <!-- Input Area -->
+    <div class="input-area">
+        <div class="input-wrapper">
+            <div class="flex items-end">
+                <textarea
+                    id="promptInput"
+                    rows="1"
+                    class="flex-grow p-4 bg-gray-100 text-gray-900 rounded-xl resize-none border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-gray-500"
+                    placeholder="계산, 코딩, 또는 최신 정보 관련 질문을 입력해 보세요. (예: 오늘 AI 분야 최신 뉴스는?)"
+                    style="max-height: 200px; transition: height 0.2s;"
+                ></textarea>
+                <button
+                    id="submitBtn"
+                    class="submit-button ml-4 p-3 rounded-xl h-12 w-12 flex items-center justify-center disabled:opacity-50"
+                    disabled
+                >
+                    <!-- Send Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>
+                </button>
+            </div>
+            <p class="text-xs text-center text-gray-500 mt-2">Assistant GPT will use Python code for complex calculations, and Browser Search for real-time information.</p>
+        </div>
+    </div>
+
+    <!-- API Key/Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full border border-gray-300">
+            <h3 class="text-2xl font-bold mb-6 text-gray-900">Agent Settings</h3>
+
+            <div class="mb-4">
+                <label for="apiKeyInput" class="block text-sm font-medium text-gray-700 mb-2">Groq API Key</label>
+                <input type="password" id="apiKeyInput" class="w-full p-3 rounded-lg bg-gray-100 text-gray-900 border border-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your Groq API Key (starts with 'gsk_...')">
+                <p class="text-xs text-blue-600 mt-1">Key is now saved in your browser (Local Storage) and will persist across reloads.</p>
+            </div>
+
+            <div class="mb-6">
+                <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-2">Select Model</label>
+                <select id="modelSelect" class="w-full p-3 rounded-lg bg-gray-100 text-gray-900 border border-gray-300 focus:ring-blue-500 focus:border-blue-500">
+                    <!-- Updated Model names to reflect dual capability -->
+                    <option value="openai/gpt-oss-20b" selected>GPT-OSS 20B (Code & Search)</option>
+                    <option value="openai/gpt-oss-120b">GPT-OSS 120B (Code & Search)</option>
+                    <option value="groq/compound">Groq Compound (Native Web Search)</option>
+                    <option value="groq/compound-mini">Groq Compound Mini (Native Web Search)</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">
+                    *GPT-OSS: Code + Browser Search | *Compound: Native Web Search (faster, automatic)
+                </p>
+            </div>
+
+            <!-- ❗️ Browser Search Toggle ❗️ -->
+            <div class="mb-6">
+                <label for="browserSearchToggle" class="flex items-center cursor-pointer">
+                    <div class="relative">
+                        <input type="checkbox" id="browserSearchToggle" class="sr-only">
+                        <div class="block w-14 h-8 rounded-full transition duration-300 ease-in-out toggle-bg"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition duration-300 ease-in-out"></div>
+                    </div>
+                    <div class="ml-3 text-sm font-medium text-gray-700">
+                        실시간 웹 검색 사용 (Browser Search)
+                    </div>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">
+                    **ON이면, 최신 정보가 필요한 질문에 무조건 툴을 사용하도록 모델에 지시합니다.**
+                </p>
+            </div>
+            <!-- ❗️ Browser Search Toggle 끝 ❗️ -->
+
+            <!-- ❗️ Python Server Toggle ❗️ -->
+            <div class="mb-6">
+                <label for="pythonServerToggle" class="flex items-center cursor-pointer">
+                    <div class="relative">
+                        <input type="checkbox" id="pythonServerToggle" class="sr-only">
+                        <div class="block w-14 h-8 rounded-full transition duration-300 ease-in-out toggle-bg"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition duration-300 ease-in-out"></div>
+                    </div>
+                    <div class="ml-3 text-sm font-medium text-gray-700">
+                        Python 서버 브라우저 자동화 사용
+                    </div>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">
+                    **ON이면 Python Playwright 서버로 실제 브라우저를 제어합니다. (http://localhost:5000)**
+                </p>
+            </div>
+            <!-- ❗️ Python Server Toggle 끝 ❗️ -->
+                <button id="closeModalBtn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150">
+                    Save and Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables for API Key, UI State, and Chat History
+        let GROQ_API_KEY = null;
+        let isProcessing = false;
+        let isBrowserSearchEnabled = true;
+        let usePythonServer = false;  // Python 서버 사용 여부
+        // 맥락 유지를 위해 대화 기록을 저장하는 배열입니다.
+        const chatHistory = []; 
+        
+        // 툴 사용 가능한 모델 목록 (Code Interpreter 및 Browser Search)
+        const multiToolCapableModels = [ 
+            'openai/gpt-oss-120b', 
+            'openai/gpt-oss-20b',
+            'groq/compound',
+            'groq/compound-mini'
+        ];
+
+
+        // --- Utility Functions ---
+
+        /**
+         * Load settings from localStorage
+         */
+        function loadSettings() {
+            const storedKey = localStorage.getItem('groqApiKey');
+            const storedModel = localStorage.getItem('groqSelectedModel');
+            const storedSearchEnabled = localStorage.getItem('isBrowserSearchEnabled');
+            const storedPythonEnabled = localStorage.getItem('usePythonServer');
+
+            if (storedKey) {
+                GROQ_API_KEY = storedKey;
+            }
+
+            // Set default model
+            if (storedModel && multiToolCapableModels.includes(storedModel)) {
+                modelSelect.value = storedModel;
+            } else {
+                modelSelect.value = 'openai/gpt-oss-20b'; 
+            }
+
+            // 검색 툴 상태 적용
+            if (storedSearchEnabled !== null) {
+                isBrowserSearchEnabled = storedSearchEnabled === 'true';
+            }
+            
+            // Python 서버 상태 적용
+            if (storedPythonEnabled !== null) {
+                usePythonServer = storedPythonEnabled === 'true';
+            }
+        }
+
+        /**
+         * Save settings to localStorage
+         */
+        function saveSettings(key, model, isSearchEnabled, isPythonEnabled) { 
+            localStorage.setItem('groqApiKey', key);
+            localStorage.setItem('groqSelectedModel', model);
+            localStorage.setItem('isBrowserSearchEnabled', isSearchEnabled);
+            localStorage.setItem('usePythonServer', isPythonEnabled);
+        }
+
+        /**
+         * Exponential Backoff Retry mechanism for fetch.
+         * Retries the fetch request if it fails, with increasing delay.
+         */
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 && i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        console.warn(`Rate limit hit (429). Retrying in ${delay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        const errorMessage = errorData.error?.message || response.statusText;
+                        // 400 에러 메시지에서 특정 키워드를 찾아 로그에 상세 정보 추가
+                        if (errorMessage.includes('executed_tools')) {
+                            console.error(`CRITICAL ERROR (400 - executed_tools): This error means the 'executed_tools' property was not successfully stripped from the assistant message history before sending. Check 'cleanMessageForAPI' function.`, errorMessage);
+                        } else if (errorMessage.includes('Tool choice is none')) {
+                            console.error(`API Error (400 - Tool Choice): The model called a tool, but the tool_choice setting was likely set to 'none' or the tool definition was malformed.`, errorMessage);
+                        }
+                        throw new Error(`API Error: ${response.status} - ${errorMessage}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        console.error("Max retries reached. Request failed.", error);
+                        throw error;
+                    }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+
+        // --- UI & State Management ---
+
+        const chatContainer = document.getElementById('chatContainer');
+        const promptInput = document.getElementById('promptInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const modelSelect = document.getElementById('modelSelect');
+        const apiKeyStatus = document.getElementById('apiKeyStatus');
+        const browserSearchToggle = document.getElementById('browserSearchToggle');
+        const pythonServerToggle = document.getElementById('pythonServerToggle'); 
+
+        function updateUIState() {
+            const isKeyValid = GROQ_API_KEY && GROQ_API_KEY.startsWith('gsk_');
+            const isInputEmpty = promptInput.value.trim() === '';
+            const selectedModel = modelSelect.value;
+            const isToolCapable = multiToolCapableModels.includes(selectedModel);
+
+
+            // Update submit button state
+            submitBtn.disabled = isProcessing || !isKeyValid || isInputEmpty;
+
+            // Update API Key Status Text
+            if (isKeyValid) {
+                apiKeyStatus.classList.remove('bg-red-200', 'text-red-800');
+                apiKeyStatus.classList.add('bg-green-200', 'text-green-800');
+                
+                let toolStatus = 'Code Execution';
+                if (isBrowserSearchEnabled) {
+                    toolStatus += ' AND Browser Search (ON)';
+                } else {
+                    toolStatus += ' (Browser Search OFF)';
+                }
+
+                if (isToolCapable) {
+                    apiKeyStatus.innerHTML = `✅ Ready with Model: **${selectedModel}** (${toolStatus})`;
+                } else {
+                    apiKeyStatus.innerHTML = `✅ Ready with Model: **${selectedModel}** (Text Only)`;
+                }
+            } else {
+                apiKeyStatus.classList.remove('bg-green-200', 'text-green-800');
+                apiKeyStatus.classList.add('bg-red-200', 'text-red-800');
+                apiKeyStatus.innerHTML = '⚠️ API Key Required. Click settings to enter your Groq API Key.';
+            }
+
+            // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Auto-resize textarea logic
+        function autoResizeTextarea() {
+            promptInput.style.height = 'auto';
+            promptInput.style.height = promptInput.scrollHeight + 'px';
+        }
+
+        // --- Message Display ---
+
+        function appendMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message-bubble');
+
+            if (role === 'user') {
+                messageDiv.classList.add('user-message', 'ml-auto');
+                messageDiv.textContent = content;
+            } else { // assistant
+                messageDiv.classList.add('ai-message', 'mr-auto');
+                messageDiv.innerHTML = content; 
+            }
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return messageDiv;
+        }
+        
+        function formatAgentResponse(text) {
+             // Simple markdown-like formatting for display
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); 
+            text = text.replace(/\n\n/g, '<br><br>');
+            text = text.replace(/\n/g, '<br>');
+            return text;
+        }
+
+        /**
+         * Safely parses tool arguments which might be a JSON string or already an object.
+         */
+        function getParsedArgs(args) {
+            // If args is already an object, return it.
+            if (typeof args === 'object' && args !== null) {
+                return args;
+            }
+            // If args is a string, attempt to parse it as JSON.
+            if (typeof args === 'string' && args.trim().startsWith('{')) {
+                try {
+                    return JSON.parse(args);
+                } catch (e) {
+                    // If parsing fails, return an object containing the raw string for inspection
+                    return { raw_string: args }; 
+                }
+            }
+            // Return the argument itself if it's a primitive type that's not JSON
+            return args; 
+        }
+
+        /**
+         * Formats the tool execution result, distinguishing between Code and Search.
+         * @param {object} tool - The tool execution object from the Groq API response.
+         */
+        function formatExecutedTool(tool) {
+            
+            const parsedArgs = getParsedArgs(tool.arguments);
+
+            let toolTitle, inputLabel, inputContent;
+            
+            // Groq's API uses 'output' for browser_search and 'code_results' for code_interpreter
+            const toolOutput = tool.output || tool.code_results?.[0]?.text || 'No output captured.';
+
+            // Identify tool type based on function name (most reliable)
+            if (tool.name === 'browser_search') {
+                toolTitle = '🔍 웹 검색 (Browser Search)';
+                inputLabel = '검색 쿼리:';
+                // Display parsed arguments (should be a JSON object like {query: '...'})
+                inputContent = parsedArgs; 
+            } 
+            else if (tool.name === 'code_interpreter') {
+                toolTitle = '🛠️ 코드 실행 (Python Interpreter)';
+                inputLabel = '실행 코드:';
+                // Extract only the code string from the arguments object
+                inputContent = parsedArgs && typeof parsedArgs === 'object' && 'code' in parsedArgs ? parsedArgs.code : parsedArgs; 
+            } 
+            else {
+                toolTitle = '🔧 툴 실행 (알 수 없음)';
+                inputLabel = '입력:';
+                inputContent = tool.arguments || 'N/A';
+            }
+            
+
+            // Format inputContent for display
+            let formattedInput;
+            if (typeof inputContent === 'object' && inputContent !== null) {
+                // If it's an object, stringify it nicely
+                formattedInput = JSON.stringify(inputContent, null, 2);
+            } else {
+                // If it's a string (e.g., Python code) or primitive, display it directly
+                formattedInput = String(inputContent);
+            }
+            
+            // HTML escape the input and output to prevent injection and display code correctly
+            formattedInput = formattedInput.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const formattedOutput = toolOutput.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            let html = `<div class="ai-tool-call">`;
+            html += `<strong>${toolTitle}</strong><br>`;
+            html += `<strong class="text-xs text-gray-700">${inputLabel}</strong> <div class="pre-container p-2 mt-1 mb-2 rounded bg-gray-50 border border-gray-300 text-gray-800 overflow-x-auto text-sm">${formattedInput}</div>`;
+            html += `<strong class="text-xs text-gray-700">툴 출력:</strong> <div class="pre-container p-2 mt-1 rounded bg-gray-50 border border-gray-300 text-gray-800 overflow-x-auto text-sm">${formattedOutput}</div>`;
+            html += `</div>`;
+            return html;
+        }
+
+        /**
+         * Cleans assistant messages for API submission by removing unsupported fields like executed_tools, tool_calls, and reasoning.
+         * @param {object} message - The message object from chatHistory.
+         * @returns {object} A cleaned message object ready for the Groq API payload.
+         */
+        function cleanMessageForAPI(message) {
+            // Groq API에 보낼 때는 불필요한 필드를 제거해야 합니다.
+            if (message.role === 'assistant') {
+                // 구조 분해 할당을 사용하여 불필요한 필드를 제외하고 나머지 속성을 복사합니다.
+                const { executed_tools, tool_calls, reasoning, ...cleanedMessage } = message;
+                return cleanedMessage;
+            }
+            return message;
+        }
+
+
+        // --- Core Agent Logic (Groq API Call) ---
+
+        async function processGoal() {
+            if (isProcessing) return;
+
+            const userGoal = promptInput.value.trim();
+            if (!userGoal || !GROQ_API_KEY) {
+                updateUIState();
+                return;
+            }
+
+            // 1. Setup UI for processing
+            isProcessing = true;
+            submitBtn.disabled = true;
+            
+            // 사용자 메시지 UI 표시
+            appendMessage('user', userGoal);
+            
+            // 사용자 메시지를 chatHistory에 추가 (맥락 유지)
+            chatHistory.push({ role: "user", content: userGoal });
+
+            promptInput.value = '';
+            autoResizeTextarea();
+            updateUIState();
+
+            // Create a loading/placeholder message for the AI response
+            const loadingMessage = appendMessage('assistant', '...');
+            loadingMessage.innerHTML = 'Thinking... <span class="animate-spin text-lg">🧠</span>';
+
+            // Python 서버가 활성화되어 있으면 먼저 시도
+            if (usePythonServer) {
+                await processPythonServer(userGoal, loadingMessage);
+            } else {
+                await processGroqAPI(userGoal, loadingMessage);
+            }
+            
+            // 5. Final UI Cleanup
+            isProcessing = false;
+            updateUIState();
+        }
+        
+        /**
+         * Python 서버로 브라우저 자동화 요청
+         */
+        async function processPythonServer(userGoal, loadingMessage) {
+            try {
+                console.log("Python 서버 요청:", userGoal);
+                const response = await fetch('http://localhost:5000/api/browse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ goal: userGoal })
+                });
+                
+                const data = await response.json();
+                console.log("Python 서버 응답:", data);
+                
+                if (data.success) {
+                    // 브라우저 자동화 작업 완료
+                    let resultHTML = `<div class="ai-tool-call"><strong>🎯 브라우저 자동화 완료</strong><br>`;
+                    resultHTML += `${data.result}<br>`;
+                    resultHTML += `📍 URL: <a href="${data.url}" target="_blank" style="color: #3b82f6; text-decoration: underline;">${data.url}</a><br><br>`;
+                    resultHTML += `📝 메시지: ${data.message}<br>`;
+                    resultHTML += `</div>`;
+                    
+                    loadingMessage.innerHTML = resultHTML + formatAgentResponse('브라우저 자동화 작업이 완료되었습니다!');
+                    chatHistory.push({ role: "assistant", content: `${data.result}\n${data.url}` });
+                } else {
+                    loadingMessage.innerHTML = formatAgentResponse(`⚠️ 작업 실패: ${data.error || '알 수 없는 오류'}`);
+                }
+            } catch (error) {
+                console.error("Python 서버 연결 오류:", error);
+                loadingMessage.innerHTML = formatAgentResponse(`⚠️ Python 서버 연결 실패: ${error.message}<br>서버가 실행 중인지 확인해 주세요. (http://localhost:5000)`);
+            }
+        }
+        
+        /**
+         * Groq API 처리 (기존 로직)
+         */
+        async function processGroqAPI(userGoal, loadingMessage) {
+            const selectedModel = modelSelect.value;
+
+            
+            // --- 툴 정의 및 시스템 명령어 조건부 설정 ---
+            let systemInstruction = `You are Assistant GPT, a powerful, ultra-fast, and helpful AI. Respond concisely and clearly in Korean. Use the Python Code Interpreter tool only when calculation or code execution is explicitly required to answer the user's question. Maintain the conversation context from the chat history provided.`;
+            
+            // Base tools (항상 코드 인터프리터를 포함)
+            const baseTools = [
+                {
+                    type: "function",
+                    function: {
+                        name: "code_interpreter",
+                        description: "Execute Python code to solve complex calculations, data analysis, or numerical tasks. The code output will be returned to the model as context.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                code: {
+                                    type: "string",
+                                    description: "The Python code to execute. Print output using the print() function."
+                                }
+                            },
+                            required: ["code"]
+                        }
+                    }
+                }
+            ];
+
+            let agentTools = [...baseTools]; 
+            let isCompoundModel = selectedModel.startsWith('groq/compound');
+            
+            // Compound 모델이 아닌 경우에만 Browser Search 도구 추가
+            if (isBrowserSearchEnabled && !isCompoundModel) {
+                const browserSearchTool = {
+                    type: "function",
+                    function: {
+                        name: "browser_search",
+                        description: "Performs a real-time web search for up-to-date or external information (e.g., news, current events, game information).",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                query: {
+                                    type: "string",
+                                    description: "The search query."
+                                }
+                            },
+                            required: ["query"]
+                        }
+                    }
+                };
+                agentTools.push(browserSearchTool);
+                
+                // 활성화 시 툴 사용 강제 (사용자 요청 사항)
+                systemInstruction = `You are Assistant GPT, a powerful, ultra-fast, and helpful AI. Respond concisely and clearly in Korean. Use the Python Code Interpreter tool only when calculation or code execution is explicitly required to answer the user's question. **CRITICAL: For any question requiring up-to-date or external information (like current events, weather, news, stock prices), you MUST use the browser_search tool.** Maintain the conversation context from the chat history provided.`;
+            } else if (isCompoundModel) {
+                // Compound 모델은 기본적으로 웹 검색 지원
+                systemInstruction = `You are Assistant GPT, a powerful, ultra-fast, and helpful AI. Respond concisely and clearly in Korean. Use web search automatically for any questions requiring up-to-date or external information. Maintain the conversation context from the chat history provided.`;
+            }
+
+
+            // API에 전달할 최종 메시지 리스트
+            // ❗️ 오류 1 해결: chatHistory의 assistant 메시지에서 executed_tools를 제거한 후 전송합니다.
+            const messagesToSend = [
+                { role: "system", content: systemInstruction },
+                ...chatHistory
+                    .filter(msg => msg.role !== 'system')
+                    .map(cleanMessageForAPI) 
+            ];
+            
+            const payload = {
+                model: selectedModel,
+                messages: messagesToSend, 
+                temperature: 0.5,
+                max_tokens: 4096
+            };
+            
+            // Compound 모델이 아닌 경우에만 tools 추가
+            if (!isCompoundModel) {
+                payload.tools = agentTools;
+                payload.tool_choice = "auto";
+            }
+            
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${GROQ_API_KEY}`
+                },
+                body: JSON.stringify(payload)
+            };
+
+            try {
+                // 3. API Call with Retry Logic
+                const response = await fetchWithRetry(apiUrl, options);
+                const data = await response.json();
+
+                // 4. Process Response
+                console.log("API Response:", data); // 디버깅: 전체 응답 로깅
+                
+                if (data.choices && data.choices.length > 0) {
+                    const choice = data.choices[0];
+                    const agentMessage = choice.message;
+                    console.log("Agent Message:", agentMessage); // 디버깅: 에이전트 메시지 로깅
+                    
+                    let agentResponse = agentMessage.content || '';
+                    let toolOutput = '';
+
+                    // Check for executed tools (Code Interpreter, Browser Search, Web Search results)
+                    if (agentMessage.executed_tools && agentMessage.executed_tools.length > 0) {
+                        console.log("Executed Tools found:", agentMessage.executed_tools); // 디버깅
+                        // Groq Compound 모델의 검색 도구 감지
+                        toolOutput = agentMessage.executed_tools.map(tool => {
+                            if (tool.type === 'search' || tool.type === 'visit' || tool.name === 'web_search') {
+                                return `<div class="ai-tool-call"><strong>🔍 웹 검색 완료</strong><br>검색 결과를 바탕으로 답변을 생성했습니다.<br></div>`;
+                            }
+                            return formatExecutedTool(tool);
+                        }).join(''); 
+                    } else if (agentMessage.tool_calls && agentMessage.tool_calls.length > 0) {
+                        // tool_calls가 있을 경우 (다른 API 응답 형식)
+                        console.log("Tool Calls found (alternative format):", agentMessage.tool_calls);
+                        // 단순히 응답 플래그만 설정
+                        toolOutput = 'tool_calls_detected';
+                    }
+                    
+                    console.log("Agent Response text:", agentResponse); // 디버깅: 응답 텍스트
+                    console.log("Tool Output:", toolOutput); // 디버깅: 도구 출력
+                    
+                    // 항상 chatHistory에 추가 (빈 응답도 포함)
+                    chatHistory.push(agentMessage);
+                    
+                    if (toolOutput === 'tool_calls_detected' || (toolOutput && !agentResponse)) {
+                        // tool_calls가 감지되었으나 응답이 없거나, executed_tools가 있으나 응답이 없는 경우
+                        // 단순하게 사용자의 원래 질문만 다시 던짐
+                        loadingMessage.innerHTML = formatAgentResponse("정보를 찾고 있습니다...");
+                        
+                        // chatHistory에서 마지막 빈 응답 제거
+                        if (chatHistory.length > 0) {
+                            chatHistory.pop();
+                        }
+                        
+                        // 신선한 요청으로 재시도 - 도구 사용 안 함 (직접 답변)
+                        const freshMessages = [
+                            { role: "system", content: "You are Assistant GPT. Answer the user's question directly and concisely in Korean. Do NOT mention tools or searches. Just provide the answer." },
+                            { role: "user", content: userGoal }
+                        ];
+                        
+                        const freshPayload = {
+                            model: selectedModel,
+                            messages: freshMessages,
+                            temperature: 0.7,
+                            max_tokens: 4096
+                            // tools와 tool_choice 제거 - 직접 텍스트 응답만 받음
+                        };
+                        
+                        const freshOptions = {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${GROQ_API_KEY}`
+                            },
+                            body: JSON.stringify(freshPayload)
+                        };
+                        
+                        try {
+                            const freshResponse = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', freshOptions);
+                            const freshData = await freshResponse.json();
+                            
+                            console.log("Fresh retry response:", freshData);
+                            
+                            if (freshData.choices && freshData.choices.length > 0) {
+                                const freshChoice = freshData.choices[0];
+                                const freshMessage = freshChoice.message;
+                                const freshResponse_text = freshMessage.content || '';
+                                
+                                console.log("Fresh response text:", freshResponse_text);
+                                
+                                if (freshResponse_text.trim()) {
+                                    chatHistory.push({ role: "user", content: userGoal });
+                                    chatHistory.push(freshMessage);
+                                    loadingMessage.innerHTML = formatAgentResponse(freshResponse_text);
+                                } else {
+                                    // 빈 응답이 온 경우 - 추가 로깅
+                                    console.warn("Fresh response was empty. Full message:", freshMessage);
+                                    loadingMessage.innerHTML = formatAgentResponse("답변을 생성할 수 없습니다. API 상태를 확인해 주세요.");
+                                }
+                            } else {
+                                console.error("No choices in fresh response:", freshData);
+                                loadingMessage.innerHTML = formatAgentResponse("API 응답 오류입니다. 다시 시도해 주세요.");
+                            }
+                        } catch (error) {
+                            console.error("Fresh retry error:", error);
+                            loadingMessage.innerHTML = formatAgentResponse("재요청 중 오류: " + error.message);
+                        }
+                    } else if (toolOutput && agentResponse) {
+                        // 모델이 이미 응답을 생성한 경우
+                        loadingMessage.innerHTML = toolOutput + formatAgentResponse(agentResponse);
+                    } else if (agentResponse) {
+                        // 툴 없이 직접 응답
+                        loadingMessage.innerHTML = formatAgentResponse(agentResponse);
+                    } else {
+                        // 완전히 빈 응답 (이상 상황)
+                        loadingMessage.innerHTML = formatAgentResponse("응답을 받을 수 없습니다. 다시 시도해 주세요.");
+                    }
+
+
+                } else {
+                    const errorMessage = data.error?.message || "Unknown error occurred.";
+                    loadingMessage.innerHTML = formatAgentResponse(`**API 응답 오류:** ${errorMessage}<br>설정에서 API 키와 모델을 확인해 주세요.`);
+                    console.error("API response failure:", data);
+                }
+
+            } catch (error) {
+                console.error("Fetch error:", error);
+                loadingMessage.innerHTML = formatAgentResponse(`**연결 오류:** Groq API에 연결할 수 없습니다. 네트워크 또는 API 키를 확인해 주세요. 상세: ${error.message}`);
+            }
+        }
+        
+        // --- Event Listeners ---
+
+        settingsBtn.addEventListener('click', () => {
+            // Load current values before opening modal
+            apiKeyInput.value = GROQ_API_KEY || '';
+            modelSelect.value = modelSelect.value || 'openai/gpt-oss-20b'; 
+            browserSearchToggle.checked = isBrowserSearchEnabled;
+            pythonServerToggle.checked = usePythonServer;
+            settingsModal.style.display = 'flex';
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            const key = apiKeyInput.value.trim();
+            const model = modelSelect.value;
+            const searchEnabled = browserSearchToggle.checked;
+            const pythonEnabled = pythonServerToggle.checked;
+            isBrowserSearchEnabled = searchEnabled;
+            usePythonServer = pythonEnabled;
+            
+            if (key) {
+                GROQ_API_KEY = key;
+                saveSettings(key, model, isBrowserSearchEnabled, usePythonServer);
+                console.log("모든 설정이 저장되었습니다. Python Server:", usePythonServer);
+            } else {
+                GROQ_API_KEY = null;
+                saveSettings('', model, isBrowserSearchEnabled, usePythonServer);
+                console.log("API 키가 초기화되었습니다.");
+            }
+            settingsModal.style.display = 'none';
+            updateUIState();
+        });
+
+        promptInput.addEventListener('input', () => {
+            autoResizeTextarea();
+            updateUIState();
+        });
+        
+        // Listen for model change inside modal to update status immediately
+        modelSelect.addEventListener('change', () => {
+            if (GROQ_API_KEY) {
+                 saveSettings(GROQ_API_KEY, modelSelect.value, isBrowserSearchEnabled);
+            }
+            updateUIState(); // Update status text when model changes
+        });
+
+        promptInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevent new line
+                if (!submitBtn.disabled) {
+                    processGoal();
+                }
+            }
+        });
+
+        submitBtn.addEventListener('click', processGoal);
+
+        // Initial setup on load
+        window.onload = () => {
+            loadSettings(); // Load persisted settings
+            // Python 토글 상태 초기화
+            console.log("초기화 - usePythonServer:", usePythonServer);
+            if (pythonServerToggle) {
+                pythonServerToggle.checked = usePythonServer;
+                console.log("토글 체크 설정됨:", pythonServerToggle.checked);
+            }
+            updateUIState();
+        };
+
+    </script>
+</body>
+</html>
