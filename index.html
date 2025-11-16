@@ -601,7 +601,9 @@
         async function processPythonServer(userGoal, loadingMessage) {
             try {
                 console.log("Python 서버 요청:", userGoal);
-                const response = await fetch('http://localhost:5000/api/browse', {
+                // 현재 도메인 자동 감지 (로컬/배포 둘 다 지원)
+                const serverUrl = `${window.location.origin}/api/browse`;
+                const response = await fetch(serverUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
