@@ -7,7 +7,9 @@ import os
 import re
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-CORS(app)
+
+# CORS 설정 - 모든 origin 허용 (배포 환경에서 필수)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/api/browse', methods=['POST'])
 def browse():
@@ -33,7 +35,11 @@ def browse():
         
         # Playwright로 자동화 시작
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)  # 브라우저 창 표시
+            # ⚠️ 배포 환경에서는 headless=True 필수!
+            browser = p.chromium.launch(
+                headless=True,  # ✅ 서버 환경에서 GUI 없이 실행
+                args=['--no-sandbox', '--disable-setuid-sandbox']  # Docker 환경 안정화
+            )
             page = browser.new_page()
             page.set_viewport_size({"width": 1280, "height": 720})
             
