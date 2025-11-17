@@ -1,12 +1,14 @@
-# Microsoft Playwright 공식 이미지 사용 (Chromium 이미 설치됨)
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+# Selenium + Chrome 공식 이미지
+FROM selenium/standalone-chrome:latest
 
-# 작업 디렉토리 설정
+# Python 설치
+USER root
+RUN apt-get update && apt-get install -y python3 python3-pip
 WORKDIR /app
 
 # Python 패키지 설치
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 파일 복사
 COPY . .
@@ -14,5 +16,5 @@ COPY . .
 # 포트 노출
 EXPOSE 5000
 
-# Start Command는 Cloudtype 설정에서 지정
-# CMD ["python", "server.py"]
+# 서버 실행
+CMD ["python3", "server.py"]
