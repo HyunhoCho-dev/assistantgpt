@@ -11,6 +11,129 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 # CORS 설정 - 모든 origin 허용 (배포 환경에서 필수)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+@app.route('/api/analyze', methods=['POST'])
+def analyze_page():
+    """
+    페이지 구조 분석 엔드포인트
+    요청: { "url": "https://example.com" }
+    응답: { "success": true, "html": "...", "title": "...", "screenshot": "base64..." }
+    """
+    try:
+        data = request.json
+        url = data.get('url', '')
+        
+        if not url:
+            return jsonify({
+                'success': False,
+                'error': 'URL이 비어있습니다.'
+            }), 400
+        
+        print(f"[페이지 분석] {url}")
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
+            )
+            page = browser.new_page()
+            page.set_viewport_size({"width": 1280, "height": 720})
+            
+            try:
+                # 페이지 방문
+                page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                page.wait_for_timeout(2000)
+                
+                # 페이지 정보 수집
+                title = page.title()
+                html_content = page.content()
+                current_url = page.url
+                
+                # 페이지의 주요 요소 분석
+                elements_info = page.evaluate("""() => {
+                    const info = {
+                        buttons: [],
+                        inputs: [],
+                        links: [],
+                        forms: []
+                    };
+                    
+                    // 버튼 정보
+                    document.querySelectorAll('button').forEach((btn, i) => {
+                        if (i < 10) {  // 처음 10개만
+                            info.buttons.push({
+                                text: btn.textContent.trim(),
+                                id: btn.id,
+                                class: btn.className
+                            });
+                        }
+                    });
+                    
+                    // 입력 필드 정보
+                    document.querySelectorAll('input').forEach((input, i) => {
+                        if (i < 10) {
+                            info.inputs.push({
+                                type: input.type,
+                                name: input.name,
+                                id: input.id,
+                                placeholder: input.placeholder
+                            });
+                        }
+                    });
+                    
+                    // 링크 정보
+                    document.querySelectorAll('a').forEach((link, i) => {
+                        if (i < 10) {
+                            info.links.push({
+                                text: link.textContent.trim(),
+                                href: link.href,
+                                id: link.id
+                            });
+                        }
+                    });
+                    
+                    // 폼 정보
+                    document.querySelectorAll('form').forEach((form, i) => {
+                        if (i < 5) {
+                            info.forms.push({
+                                action: form.action,
+                                method: form.method,
+                                id: form.id
+                            });
+                        }
+                    });
+                    
+                    return info;
+                }""")
+                
+                # 스크린샷 캡처 (base64)
+                screenshot = page.screenshot(type='png')
+                import base64
+                screenshot_base64 = base64.b64encode(screenshot).decode('utf-8')
+                
+                browser.close()
+                
+                return jsonify({
+                    'success': True,
+                    'url': current_url,
+                    'title': title,
+                    'elements': elements_info,
+                    'html_preview': html_content[:2000],  # 처음 2000자만
+                    'screenshot': screenshot_base64
+                })
+                
+            except Exception as e:
+                browser.close()
+                raise e
+                
+    except Exception as e:
+        print(f"[분석 오류] {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'페이지 분석 오류: {str(e)}'
+        }), 500
+
+
 @app.route('/api/browse', methods=['POST'])
 def browse():
     """
@@ -35,10 +158,9 @@ def browse():
         
         # Playwright로 자동화 시작
         with sync_playwright() as p:
-            # ⚠️ 배포 환경에서는 headless=True 필수!
             browser = p.chromium.launch(
-                headless=True,  # ✅ 서버 환경에서 GUI 없이 실행
-                args=['--no-sandbox', '--disable-setuid-sandbox']  # Docker 환경 안정화
+                headless=True,
+                args=['--no-sandbox', '--disable-setuid-sandbox']
             )
             page = browser.new_page()
             page.set_viewport_size({"width": 1280, "height": 720})
@@ -137,11 +259,12 @@ if __name__ == '__main__':
     print(f"📍 포트: {port}")
     print(f"🌍 모드: {'프로덕션' if is_production else '개발'}")
     print("💡 Playwright로 브라우저 자동화 준비 완료")
+    print("🔍 페이지 분석 API 활성화")
     print("=" * 60)
     
     app.run(
-        debug=not is_production,  # 프로덕션에서는 False
-        host='0.0.0.0',  # 모든 IP에서 접근 가능
+        debug=not is_production,
+        host='0.0.0.0',
         port=port,
         threaded=True
     )
