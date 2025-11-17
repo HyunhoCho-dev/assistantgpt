@@ -38,9 +38,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright 브라우저 설치
-RUN playwright install chromium
+# Playwright 환경 변수 설정
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Playwright 브라우저 설치 (의존성 먼저, 그 다음 브라우저)
 RUN playwright install-deps chromium
+RUN playwright install chromium
 
 # 애플리케이션 파일 복사
 COPY . .
@@ -48,5 +51,5 @@ COPY . .
 # 포트 노출
 EXPOSE 5000
 
-# 서버 실행
-CMD ["python", "server.py"]
+# Start Command는 Cloudtype 설정에서 지정
+# CMD ["python", "server.py"]
