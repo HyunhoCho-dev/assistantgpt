@@ -596,40 +596,115 @@
         }
         
         /**
-         * Python 서버로 브라우저 자동화 요청
+         * Python 서버로 브라우저 자동화 요청 - AI가 생성한 Playwright 코드 실행
          */
         async function processPythonServer(userGoal, loadingMessage) {
             try {
-                console.log("Python 서버 요청:", userGoal);
-                // 현재 도메인 자동 감지 (로컬/배포 둘 다 지원)
+                console.log("Python 서버로 AI 기반 브라우저 자동화 시작:", userGoal);
+                loadingMessage.innerHTML = 'Playwright 제어 코드 생성 중... 🤖';
+                
+                // 1단계: Groq API를 사용해 AI가 Playwright 코드 생성
+                const selectedModel = modelSelect.value;
+                const systemInstruction = `당신은 Playwright Python을 전문으로 하는 웹 자동화 전문가입니다. 
+사용자의 요청을 받으면 Playwright를 사용하여 웹사이트를 제어하는 Python 코드를 작성하세요.
+
+중요한 규칙:
+1. 코드는 page 객체가 이미 생성되어 있다고 가정하세요. (page = browser.new_page())
+2. page.goto(), page.fill(), page.click(), page.wait_for_timeout() 등을 사용하세요.
+3. 절대로 browser = 나 page = 를 다시 정의하지 마세요.
+4. 코드만 작성하고 설명은 하지 마세요.
+5. \`\`\`python 마크다운 포맷을 사용하여 코드를 감싸세요.
+
+예시:
+\`\`\`python
+page.goto('https://example.com')
+page.wait_for_timeout(2000)
+page.fill('input[name="search"]', 'hello')
+page.press('input[name="search"]', 'Enter')
+page.wait_for_timeout(3000)
+\`\`\``;
+                
+                const messages = [
+                    { role: "system", content: systemInstruction },
+                    { role: "user", content: userGoal }
+                ];
+                
+                const payload = {
+                    model: selectedModel,
+                    messages: messages,
+                    temperature: 0.5,
+                    max_tokens: 2048
+                };
+                
+                const options = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${GROQ_API_KEY}`
+                    },
+                    body: JSON.stringify(payload)
+                };
+                
+                const apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+                const response = await fetchWithRetry(apiUrl, options);
+                const data = await response.json();
+                
+                console.log("AI 코드 생성 응답:", data);
+                
+                if (!data.choices || data.choices.length === 0) {
+                    throw new Error("AI 코드 생성 실패");
+                }
+                
+                let generatedCode = data.choices[0].message.content || '';
+                
+                // 마크다운 형식의 코드 블록 추출
+                const codeMatch = generatedCode.match(/\`\`\`python\n([\s\S]*?)\`\`\`/);
+                if (codeMatch) {
+                    generatedCode = codeMatch[1].trim();
+                }
+                
+                console.log("생성된 Playwright 코드:", generatedCode);
+                
+                if (!generatedCode.trim()) {
+                    throw new Error("AI가 유효한 코드를 생성하지 못했습니다.");
+                }
+                
+                loadingMessage.innerHTML = 'Playwright 코드 실행 중... 🌐';
+                
+                // 2단계: 생성된 코드를 Python 서버로 전송
                 const serverUrl = `${window.location.origin}/api/browse`;
-                const response = await fetch(serverUrl, {
+                const executeResponse = await fetch(serverUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ goal: userGoal })
+                    body: JSON.stringify({ 
+                        goal: userGoal,
+                        code: generatedCode  // AI가 생성한 코드 전송
+                    })
                 });
                 
-                const data = await response.json();
-                console.log("Python 서버 응답:", data);
+                const executeData = await executeResponse.json();
+                console.log("Python 서버 응답:", executeData);
                 
-                if (data.success) {
+                if (executeData.success) {
                     // 브라우저 자동화 작업 완료
                     let resultHTML = `<div class="ai-tool-call"><strong>🎯 브라우저 자동화 완료</strong><br>`;
-                    resultHTML += `${data.result}<br>`;
-                    resultHTML += `📍 URL: <a href="${data.url}" target="_blank" style="color: #3b82f6; text-decoration: underline;">${data.url}</a><br><br>`;
-                    resultHTML += `📝 메시지: ${data.message}<br>`;
+                    resultHTML += `${executeData.result}<br>`;
+                    resultHTML += `📍 URL: <a href="${executeData.url}" target="_blank" style="color: #3b82f6; text-decoration: underline;">${executeData.url}</a><br><br>`;
+                    resultHTML += `<strong>📝 생성된 코드:</strong><div class="pre-container p-2 mt-1 rounded bg-gray-50 border border-gray-300 text-gray-800 overflow-x-auto text-sm">${generatedCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div><br>`;
                     resultHTML += `</div>`;
                     
-                    loadingMessage.innerHTML = resultHTML + formatAgentResponse('브라우저 자동화 작업이 완료되었습니다!');
-                    chatHistory.push({ role: "assistant", content: `${data.result}\n${data.url}` });
+                    loadingMessage.innerHTML = resultHTML + formatAgentResponse('🎉 브라우저 자동화 작업이 성공적으로 완료되었습니다!');
+                    chatHistory.push({ role: "assistant", content: `브라우저 자동화 완료: ${executeData.result}\n\n생성된 코드:\n\`\`\`python\n${generatedCode}\n\`\`\`` });
                 } else {
-                    loadingMessage.innerHTML = formatAgentResponse(`⚠️ 작업 실패: ${data.error || '알 수 없는 오류'}`);
+                    loadingMessage.innerHTML = formatAgentResponse(`⚠️ 작업 실패: ${executeData.error || '알 수 없는 오류'}`);
+                    chatHistory.push({ role: "assistant", content: `브라우저 자동화 실패: ${executeData.error}` });
                 }
             } catch (error) {
-                console.error("Python 서버 연결 오류:", error);
-                loadingMessage.innerHTML = formatAgentResponse(`⚠️ Python 서버 연결 실패: ${error.message}<br>서버가 실행 중인지 확인해 주세요. (http://localhost:5000)`);
+                console.error("Python 서버 또는 AI 코드 생성 오류:", error);
+                loadingMessage.innerHTML = formatAgentResponse(`⚠️ 오류: ${error.message}<br>서버가 실행 중인지 확인해 주세요.`);
+                chatHistory.push({ role: "assistant", content: `오류: ${error.message}` });
             }
         }
         
