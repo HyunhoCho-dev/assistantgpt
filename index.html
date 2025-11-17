@@ -601,32 +601,99 @@
         async function processPythonServer(userGoal, loadingMessage) {
             try {
                 console.log("Python 서버로 AI 기반 브라우저 자동화 시작:", userGoal);
-                loadingMessage.innerHTML = 'Playwright 제어 코드 생성 중... 🤖';
                 
-                // 1단계: Groq API를 사용해 AI가 Playwright 코드 생성
+                // URL 추출
+                const urlMatch = userGoal.match(/https?:\/\/[^\s]+/);
+                let analysisResult = null;
+                
+                // 1단계: URL이 있으면 먼저 페이지 분석
+                if (urlMatch) {
+                    const targetUrl = urlMatch[0];
+                    console.log("1단계: 페이지 분석 시작 -", targetUrl);
+                    loadingMessage.innerHTML = '🔍 페이지 구조 분석 중... (1/3)';
+                    
+                    try {
+                        const analyzeUrl = `${window.location.origin}/api/analyze`;
+                        const analyzeResponse = await fetch(analyzeUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ url: targetUrl })
+                        });
+                        
+                        analysisResult = await analyzeResponse.json();
+                        console.log("페이지 분석 결과:", analysisResult);
+                        
+                        if (analysisResult.success) {
+                            loadingMessage.innerHTML = `✅ 페이지 분석 완료! (1/3)<br>
+                            📄 제목: ${analysisResult.title}<br>
+                            🔘 버튼: ${analysisResult.elements.buttons.length}개<br>
+                            📝 입력필드: ${analysisResult.elements.inputs.length}개<br>
+                            🔗 링크: ${analysisResult.elements.links.length}개`;
+                        }
+                    } catch (analyzeError) {
+                        console.warn("페이지 분석 실패, 분석 없이 진행:", analyzeError);
+                    }
+                }
+                
+                // 2단계: AI가 Playwright 코드 생성 (분석 결과 포함)
+                console.log("2단계: Playwright 코드 생성");
+                loadingMessage.innerHTML = '🤖 Playwright 제어 코드 생성 중... (2/3)';
+                
                 const selectedModel = modelSelect.value;
-                const systemInstruction = `당신은 Playwright Python을 전문으로 하는 웹 자동화 전문가입니다. 
+                
+                // 분석 결과가 있으면 AI에게 제공
+                let systemInstruction = `당신은 Playwright Python을 전문으로 하는 웹 자동화 전문가입니다. 
 사용자의 요청을 받으면 Playwright를 사용하여 웹사이트를 제어하는 Python 코드를 작성하세요.
 
 중요한 규칙:
 1. 코드는 page 객체가 이미 생성되어 있다고 가정하세요. (page = browser.new_page())
-2. page.goto(), page.fill(), page.click(), page.wait_for_timeout() 등을 사용하세요.
+2. page.goto(), page.fill(), page.click(), page.wait_for_timeout(), page.wait_for_selector() 등을 사용하세요.
 3. 절대로 browser = 나 page = 를 다시 정의하지 마세요.
 4. 코드만 작성하고 설명은 하지 마세요.
 5. \`\`\`python 마크다운 포맷을 사용하여 코드를 감싸세요.
+6. 항상 page.wait_for_load_state("networkidle")를 사용하여 페이지 로딩을 기다리세요.
+7. 동적 콘텐츠가 있을 경우 page.wait_for_timeout(2000-3000)을 추가하세요.`;
 
-예시:
-\`\`\`python
-page.goto('https://example.com')
-page.wait_for_timeout(2000)
-page.fill('input[name="search"]', 'hello')
-page.press('input[name="search"]', 'Enter')
-page.wait_for_timeout(3000)
-\`\`\``;
+                let userPrompt = userGoal;
+                
+                // 분석 결과가 있으면 AI에게 상세 정보 제공
+                if (analysisResult && analysisResult.success) {
+                    systemInstruction += `\n\n🔍 페이지 분석 결과:\n제목: ${analysisResult.title}\nURL: ${analysisResult.url}\n\n사용 가능한 요소:\n`;
+                    
+                    // 버튼 정보
+                    if (analysisResult.elements.buttons.length > 0) {
+                        systemInstruction += "\n버튼:\n";
+                        analysisResult.elements.buttons.slice(0, 5).forEach((btn, i) => {
+                            systemInstruction += `  ${i+1}. 텍스트: "${btn.text}", ID: "${btn.id}", Class: "${btn.class}"\n`;
+                        });
+                    }
+                    
+                    // 입력 필드 정보
+                    if (analysisResult.elements.inputs.length > 0) {
+                        systemInstruction += "\n입력 필드:\n";
+                        analysisResult.elements.inputs.slice(0, 5).forEach((input, i) => {
+                            systemInstruction += `  ${i+1}. Type: "${input.type}", Name: "${input.name}", ID: "${input.id}", Placeholder: "${input.placeholder}"\n`;
+                        });
+                    }
+                    
+                    // 링크 정보
+                    if (analysisResult.elements.links.length > 0) {
+                        systemInstruction += "\n링크:\n";
+                        analysisResult.elements.links.slice(0, 5).forEach((link, i) => {
+                            systemInstruction += `  ${i+1}. 텍스트: "${link.text}", Href: "${link.href}", ID: "${link.id}"\n`;
+                        });
+                    }
+                    
+                    systemInstruction += `\n위 분석 결과를 기반으로 정확한 셀렉터를 사용하여 코드를 작성하세요.\n예: ID가 있으면 #id, Class가 있으면 .class, 없으면 텍스트로 선택하세요.`;
+                }
+                
+                systemInstruction += `\n\n예시:\n\`\`\`python\npage.goto('https://example.com')\npage.wait_for_load_state("networkidle")\npage.wait_for_timeout(2000)\n\n# 버튼 클릭 (ID 사용)\npage.wait_for_selector('#play-btn')\npage.click('#play-btn')\n\n# 입력 필드 채우기\npage.fill('input[name="search"]', 'hello')\npage.press('input[name="search"]', 'Enter')\npage.wait_for_timeout(3000)\n\`\`\``;
                 
                 const messages = [
                     { role: "system", content: systemInstruction },
-                    { role: "user", content: userGoal }
+                    { role: "user", content: userPrompt }
                 ];
                 
                 const payload = {
@@ -669,9 +736,10 @@ page.wait_for_timeout(3000)
                     throw new Error("AI가 유효한 코드를 생성하지 못했습니다.");
                 }
                 
-                loadingMessage.innerHTML = 'Playwright 코드 실행 중... 🌐';
+                // 3단계: 생성된 코드 실행
+                console.log("3단계: Playwright 코드 실행");
+                loadingMessage.innerHTML = '🌐 Playwright 코드 실행 중... (3/3)';
                 
-                // 2단계: 생성된 코드를 Python 서버로 전송
                 const serverUrl = `${window.location.origin}/api/browse`;
                 const executeResponse = await fetch(serverUrl, {
                     method: 'POST',
@@ -680,7 +748,7 @@ page.wait_for_timeout(3000)
                     },
                     body: JSON.stringify({ 
                         goal: userGoal,
-                        code: generatedCode  // AI가 생성한 코드 전송
+                        code: generatedCode
                     })
                 });
                 
@@ -690,6 +758,17 @@ page.wait_for_timeout(3000)
                 if (executeData.success) {
                     // 브라우저 자동화 작업 완료
                     let resultHTML = `<div class="ai-tool-call"><strong>🎯 브라우저 자동화 완료</strong><br>`;
+                    
+                    // 분석 결과 표시
+                    if (analysisResult && analysisResult.success) {
+                        resultHTML += `<strong>📊 분석 결과:</strong><br>`;
+                        resultHTML += `- 페이지: ${analysisResult.title}<br>`;
+                        resultHTML += `- 버튼: ${analysisResult.elements.buttons.length}개, `;
+                        resultHTML += `입력필드: ${analysisResult.elements.inputs.length}개, `;
+                        resultHTML += `링크: ${analysisResult.elements.links.length}개<br><br>`;
+                    }
+                    
+                    resultHTML += `<strong>✅ 실행 결과:</strong><br>`;
                     resultHTML += `${executeData.result}<br>`;
                     resultHTML += `📍 URL: <a href="${executeData.url}" target="_blank" style="color: #3b82f6; text-decoration: underline;">${executeData.url}</a><br><br>`;
                     resultHTML += `<strong>📝 생성된 코드:</strong><div class="pre-container p-2 mt-1 rounded bg-gray-50 border border-gray-300 text-gray-800 overflow-x-auto text-sm">${generatedCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div><br>`;
@@ -706,6 +785,9 @@ page.wait_for_timeout(3000)
                 loadingMessage.innerHTML = formatAgentResponse(`⚠️ 오류: ${error.message}<br>서버가 실행 중인지 확인해 주세요.`);
                 chatHistory.push({ role: "assistant", content: `오류: ${error.message}` });
             }
+        }
+
+        
         }
         
         /**
